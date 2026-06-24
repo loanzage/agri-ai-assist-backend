@@ -14,74 +14,73 @@ async def ask_ai(data: QuestionRequest):
     # =========================
     # FETCH KNOWLEDGE BASE
     # =========================
-
-    # OPTION 1: Get ALL crops (recommended for now)
     kb_response = (
         supabase
         .table("knowledge_base")
         .select("*")
         .execute()
     )
-
-    # OPTION 2 (UNCOMMENT if you want maize-only filtering)
-    """
-    kb_response = (
-        supabase
-        .table("knowledge_base")
-        .select("*")
-        .eq("category", "maize")
-        .execute()
-    )
-    """
 
     rows = kb_response.data or []
 
     # =========================
+    # DEBUG (TEMP - REMOVE LATER)
+    # =========================
+    print("ROWS COUNT:", len(rows))
+    print("KB SAMPLE:", rows[:2])
+
+    # =========================
     # BUILD KNOWLEDGE TEXT
     # =========================
-
     knowledge_text = ""
 
-    for row in rows:
+    for r in rows:
         knowledge_text += f"""
-Crop: {row.get('crop')}
-Topic: {row.get('topic')}
-Trigger: {row.get('trigger')}
-Causes: {row.get('causes_or_details')}
-Recommendations: {row.get('recommendations')}
-Risk: {row.get('risk_level')}
+Crop: {r.get('crop', 'N/A')}
+Topic: {r.get('topic', 'N/A')}
+Trigger: {r.get('trigger', 'N/A')}
+Causes: {r.get('causes_or_details', 'N/A')}
+Recommendations: {r.get('recommendations', 'N/A')}
+Risk: {r.get('risk_level', 'N/A')}
 ---
 """
 
-    # If DB is empty, force fallback text (IMPORTANT FIX)
     if not knowledge_text.strip():
-        knowledge_text = "No local knowledge base found. Use general agricultural knowledge."
+        knowledge_text = "NO KNOWLEDGE BASE DATA FOUND."
 
     # =========================
-    # BUILD GEMINI PROMPT
+    # STRICT GEMINI PROMPT
     # =========================
-
     prompt = f"""
 You are Agri AI Assist.
 
-You MUST use the agricultural knowledge below if relevant:
+YOU MUST FOLLOW THESE RULES STRICTLY:
 
+1. Use ONLY the knowledge base below if it contains relevant information.
+2. If the knowledge base contains relevant information, prioritize it.
+3. If the knowledge base is empty or irrelevant, use general agronomy knowledge.
+4. Do NOT ignore the knowledge base.
+
+====================
+KNOWLEDGE BASE (TRUST THIS FIRST)
+====================
 {knowledge_text}
 
-QUESTION:
+====================
+QUESTION
+====================
 {question}
 
-Instructions:
-- Give a clear practical farming answer
-- If knowledge is available, prioritize it
-- If not, use general agronomy knowledge
-- Be simple and farmer-friendly
+====================
+RESPONSE RULES:
+- Keep answer simple and actionable
+- Farmer-friendly language
+- Do NOT mention "based on general knowledge" unless KB is empty
 """
 
     # =========================
-    # CALL GEMINI
+    # CALL AI
     # =========================
-
     answer = ask_gemini(prompt)
 
     return {
