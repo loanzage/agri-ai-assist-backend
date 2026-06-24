@@ -5,35 +5,34 @@ from ai_service import ask_gemini
 
 router = APIRouter()
 
+
 @router.post("/ask-ai")
 async def ask_ai(data: QuestionRequest):
 
-question = data.question
+    # ✅ FIX: proper indentation (THIS WAS YOUR CRASH)
+    question = data.question
 
-# Search knowledge base first
-kb_response = (
-    supabase
-    .table("knowledge_base")
-    .select("*")
-    .execute()
-)
+    # Search knowledge base first
+    kb_response = (
+        supabase
+        .table("knowledge_base")
+        .select("*")
+        .execute()
+    )
 
-knowledge_text = ""
+    knowledge_text = ""
 
-if kb_response.data:
-    for row in kb_response.data:
-        knowledge_text += f"""
-
+    if kb_response.data:
+        for row in kb_response.data:
+            knowledge_text += f"""
 Crop: {row.get('crop')}
 Topic: {row.get('topic')}
 Details: {row.get('causes_or_details')}
 Recommendations: {row.get('recommendations')}
 Risk: {row.get('risk_level')}
-
 """
 
-prompt = f"""
-
+    prompt = f"""
 You are Agri AI Assist.
 
 Use the agricultural knowledge below to answer the farmer.
@@ -47,9 +46,9 @@ QUESTION:
 Provide a practical farming answer.
 """
 
-answer = ask_gemini(prompt)
+    answer = ask_gemini(prompt)
 
-return {
-    "question": question,
-    "answer": answer
-}
+    return {
+        "question": question,
+        "answer": answer
+    }
