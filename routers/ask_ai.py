@@ -12,7 +12,7 @@ async def ask_ai(data: QuestionRequest):
     question = data.question
 
     # =========================
-    # FETCH KNOWLEDGE BASE
+    # STEP 1: FETCH SUPABASE KNOWLEDGE (RAG)
     # =========================
     kb_response = (
         supabase
@@ -30,7 +30,7 @@ async def ask_ai(data: QuestionRequest):
     print("KB SAMPLE:", rows[:2])
 
     # =========================
-    # BUILD KNOWLEDGE TEXT
+    # STEP 2: BUILD KNOWLEDGE CONTEXT
     # =========================
     knowledge_text = ""
 
@@ -46,40 +46,44 @@ Risk: {r.get('risk_level', 'N/A')}
 """
 
     if not knowledge_text.strip():
-        knowledge_text = "NO KNOWLEDGE BASE DATA FOUND."
+        knowledge_text = "NO LOCAL KNOWLEDGE BASE FOUND."
 
     # =========================
-    # STRICT GEMINI PROMPT
+    # STEP 3: HYBRID GEMINI PROMPT (RAG + LLM)
     # =========================
     prompt = f"""
-You are Agri AI Assist.
+You are Agri AI Assist, a smart farming assistant.
 
-YOU MUST FOLLOW THESE RULES STRICTLY:
+You are given TWO sources of knowledge:
 
-1. Use ONLY the knowledge base below if it contains relevant information.
-2. If the knowledge base contains relevant information, prioritize it.
-3. If the knowledge base is empty or irrelevant, use general agronomy knowledge.
-4. Do NOT ignore the knowledge base.
+1. LOCAL KNOWLEDGE BASE (trusted farming data from Uganda/region)
+2. YOUR GENERAL AGRONOMY KNOWLEDGE (global farming science)
+
+RULES:
+- ALWAYS prioritize LOCAL KNOWLEDGE BASE first
+- If local knowledge is incomplete, use general knowledge to expand
+- Combine both when needed
+- Never ignore local knowledge if relevant
 
 ====================
-KNOWLEDGE BASE (TRUST THIS FIRST)
+LOCAL KNOWLEDGE BASE
 ====================
 {knowledge_text}
 
 ====================
-QUESTION
+FARMER QUESTION
 ====================
 {question}
 
 ====================
-RESPONSE RULES:
-- Keep answer simple and actionable
-- Farmer-friendly language
-- Do NOT mention "based on general knowledge" unless KB is empty
+RESPONSE STYLE:
+- Simple, practical, farmer-friendly
+- Step-by-step if possible
+- Avoid long theory
 """
 
     # =========================
-    # CALL AI
+    # STEP 4: CALL GEMINI
     # =========================
     answer = ask_gemini(prompt)
 
