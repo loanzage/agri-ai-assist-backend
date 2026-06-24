@@ -30,24 +30,30 @@ async def ask_ai(data: QuestionRequest):
     print("KB SAMPLE:", rows[:2])
 
     # =========================
-    # STEP 2: STRONG AGRI RAG FILTER (FIXED)
+    # STEP 2: IMPROVED AGRI INTELLIGENT FILTER (FIXED)
     # =========================
 
-    query_words = set(question.lower().replace(",", "").split())
+    question_words = set(question.lower().replace(",", "").split())
 
-    relevant_rows = [
-        r for r in rows
-        if len(
-            query_words.intersection(
-                set(str(r.get("crop", "")).lower().split()) |
-                set(str(r.get("topic", "")).lower().split()) |
-                set(str(r.get("trigger", "")).lower().split()) |
-                set(str(r.get("causes_or_details", "")).lower().split())
-            )
-        ) > 0
-    ]
+    def row_text(r):
+        return " ".join([
+            str(r.get("crop", "")),
+            str(r.get("topic", "")),
+            str(r.get("trigger", "")),
+            str(r.get("causes_or_details", "")),
+            str(r.get("recommendations", ""))
+        ]).lower()
 
-    # fallback if no matches
+    relevant_rows = []
+
+    for r in rows:
+        text = row_text(r)
+
+        # match if ANY keyword is found anywhere in row text
+        if any(word in text for word in question_words):
+            relevant_rows.append(r)
+
+    # fallback (IMPORTANT SAFETY NET)
     use_rows = relevant_rows if relevant_rows else rows[:5]
 
     # =========================
@@ -70,7 +76,7 @@ Risk: {r.get('risk_level')}
         knowledge_text = "NO LOCAL KNOWLEDGE FOUND."
 
     # =========================
-    # STEP 4: HYBRID GEMINI PROMPT
+    # STEP 4: HYBRID GEMINI PROMPT (RAG + LLM)
     # =========================
     prompt = f"""
 You are Agri AI Assist, a smart farming assistant.
@@ -108,4 +114,4 @@ RESPONSE STYLE:
     return {
         "question": question,
         "answer": answer
-    }
+        }
