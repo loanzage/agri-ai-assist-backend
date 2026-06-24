@@ -24,25 +24,28 @@ async def ask_ai(data: QuestionRequest):
     rows = kb_response.data or []
 
     # =========================
-    # STEP 2: FILTER RELEVANT KB (IMPORTANT FIX)
-    # =========================
-    relevant_rows = [
-        r for r in rows
-        if question.lower() in (
-            str(r.get("crop", "")) +
-            str(r.get("topic", "")) +
-            str(r.get("trigger", ""))
-        ).lower()
-    ]
-
-    use_rows = relevant_rows if relevant_rows else rows[:5]
-
-    # =========================
     # DEBUG (TEMP - REMOVE LATER)
     # =========================
     print("ROWS COUNT:", len(rows))
-    print("RELEVANT ROWS:", len(relevant_rows))
     print("KB SAMPLE:", rows[:2])
+
+    # =========================
+    # STEP 2: IMPROVED RAG FILTER (FIX)
+    # =========================
+
+    # OPTION A: SIMPLE PARTIAL MATCH (RECOMMENDED BALANCED FIX)
+    relevant_rows = [
+        r for r in rows
+        if any(
+            word in str(r).lower()
+            for word in question.lower().split()
+        )
+    ]
+
+    # =========================
+    # FALLBACK IF NO MATCHES FOUND
+    # =========================
+    use_rows = relevant_rows if relevant_rows else rows[:5]
 
     # =========================
     # STEP 3: BUILD KNOWLEDGE CONTEXT
@@ -53,8 +56,9 @@ async def ask_ai(data: QuestionRequest):
         knowledge_text += f"""
 Crop: {r.get('crop')}
 Topic: {r.get('topic')}
-Cause: {r.get('causes_or_details')}
-Recommendation: {r.get('recommendations')}
+Trigger: {r.get('trigger')}
+Causes: {r.get('causes_or_details')}
+Recommendations: {r.get('recommendations')}
 Risk: {r.get('risk_level')}
 ---
 """
@@ -63,33 +67,34 @@ Risk: {r.get('risk_level')}
         knowledge_text = "NO LOCAL KNOWLEDGE BASE FOUND."
 
     # =========================
-    # STEP 4: HYBRID RAG + GEMINI PROMPT
+    # STEP 4: HYBRID GEMINI PROMPT
     # =========================
     prompt = f"""
-You are Agri AI Assist.
+You are Agri AI Assist, a smart farming assistant.
 
-You MUST follow these rules:
+You are given agricultural knowledge from a local database and general agronomy knowledge.
 
-- Use ONLY the knowledge base if relevant
-- Do NOT ignore knowledge base facts
-- If knowledge base is relevant, prioritize it first
-- If knowledge base is weak or incomplete, then expand using general agronomy knowledge
+RULES:
+- Always prioritize LOCAL KNOWLEDGE first
+- Use it if relevant
+- If incomplete, expand using general agronomy knowledge
+- Be practical and farmer-friendly
 
 ====================
-KNOWLEDGE BASE
+LOCAL KNOWLEDGE BASE
 ====================
 {knowledge_text}
 
 ====================
-QUESTION
+FARMER QUESTION
 ====================
 {question}
 
-RESPONSE RULES:
-- Be simple and practical
-- Use bullet points if helpful
+====================
+RESPONSE STYLE:
+- Simple and actionable
+- Use bullet points if needed
 - Avoid long theory
-- Focus on actionable farming advice
 """
 
     # =========================
