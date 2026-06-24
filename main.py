@@ -13,43 +13,23 @@ version="1.0.0"
 
 AI Router
 
-app.include_router(
-ai_router,
-prefix="/api",
-tags=["AI"]
-)
+app.include_router(ai_router, prefix="/api", tags=["AI"])
 
 Farmers Router
 
-app.include_router(
-farmers_router,
-prefix="/api",
-tags=["Farmers"]
-)
+app.include_router(farmers_router, prefix="/api", tags=["Farmers"])
 
 Market Router
 
-app.include_router(
-market_router,
-prefix="/api",
-tags=["Market"]
-)
+app.include_router(market_router, prefix="/api", tags=["Market"])
 
 Weather Router
 
-app.include_router(
-weather_router,
-prefix="/api",
-tags=["Weather"]
-)
+app.include_router(weather_router, prefix="/api", tags=["Weather"])
 
 Chat Router
 
-app.include_router(
-chat_router,
-prefix="/api",
-tags=["Chat"]
-)
+app.include_router(chat_router, prefix="/api", tags=["Chat"])
 
 @app.get("/")
 def root():
