@@ -9,10 +9,13 @@ router = APIRouter()
 @router.post("/ask-ai")
 async def ask_ai(data: QuestionRequest):
 
-    # ✅ FIX: proper indentation (THIS WAS YOUR CRASH)
     question = data.question
 
-    # Search knowledge base first
+    # =========================
+    # FETCH KNOWLEDGE BASE
+    # =========================
+
+    # OPTION 1: Get ALL crops (recommended for now)
     kb_response = (
         supabase
         .table("knowledge_base")
@@ -20,31 +23,64 @@ async def ask_ai(data: QuestionRequest):
         .execute()
     )
 
+    # OPTION 2 (UNCOMMENT if you want maize-only filtering)
+    """
+    kb_response = (
+        supabase
+        .table("knowledge_base")
+        .select("*")
+        .eq("category", "maize")
+        .execute()
+    )
+    """
+
+    rows = kb_response.data or []
+
+    # =========================
+    # BUILD KNOWLEDGE TEXT
+    # =========================
+
     knowledge_text = ""
 
-    if kb_response.data:
-        for row in kb_response.data:
-            knowledge_text += f"""
+    for row in rows:
+        knowledge_text += f"""
 Crop: {row.get('crop')}
 Topic: {row.get('topic')}
-Details: {row.get('causes_or_details')}
+Trigger: {row.get('trigger')}
+Causes: {row.get('causes_or_details')}
 Recommendations: {row.get('recommendations')}
 Risk: {row.get('risk_level')}
+---
 """
+
+    # If DB is empty, force fallback text (IMPORTANT FIX)
+    if not knowledge_text.strip():
+        knowledge_text = "No local knowledge base found. Use general agricultural knowledge."
+
+    # =========================
+    # BUILD GEMINI PROMPT
+    # =========================
 
     prompt = f"""
 You are Agri AI Assist.
 
-Use the agricultural knowledge below to answer the farmer.
+You MUST use the agricultural knowledge below if relevant:
 
-KNOWLEDGE:
 {knowledge_text}
 
 QUESTION:
 {question}
 
-Provide a practical farming answer.
+Instructions:
+- Give a clear practical farming answer
+- If knowledge is available, prioritize it
+- If not, use general agronomy knowledge
+- Be simple and farmer-friendly
 """
+
+    # =========================
+    # CALL GEMINI
+    # =========================
 
     answer = ask_gemini(prompt)
 
