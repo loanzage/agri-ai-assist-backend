@@ -30,21 +30,24 @@ async def ask_ai(data: QuestionRequest):
     print("KB SAMPLE:", rows[:2])
 
     # =========================
-    # STEP 2: IMPROVED RAG FILTER (FIX)
+    # STEP 2: STRONG AGRI RAG FILTER (FIXED)
     # =========================
 
-    # OPTION A: SIMPLE PARTIAL MATCH (RECOMMENDED BALANCED FIX)
+    query_words = set(question.lower().replace(",", "").split())
+
     relevant_rows = [
         r for r in rows
-        if any(
-            word in str(r).lower()
-            for word in question.lower().split()
-        )
+        if len(
+            query_words.intersection(
+                set(str(r.get("crop", "")).lower().split()) |
+                set(str(r.get("topic", "")).lower().split()) |
+                set(str(r.get("trigger", "")).lower().split()) |
+                set(str(r.get("causes_or_details", "")).lower().split())
+            )
+        ) > 0
     ]
 
-    # =========================
-    # FALLBACK IF NO MATCHES FOUND
-    # =========================
+    # fallback if no matches
     use_rows = relevant_rows if relevant_rows else rows[:5]
 
     # =========================
@@ -64,7 +67,7 @@ Risk: {r.get('risk_level')}
 """
 
     if not knowledge_text.strip():
-        knowledge_text = "NO LOCAL KNOWLEDGE BASE FOUND."
+        knowledge_text = "NO LOCAL KNOWLEDGE FOUND."
 
     # =========================
     # STEP 4: HYBRID GEMINI PROMPT
