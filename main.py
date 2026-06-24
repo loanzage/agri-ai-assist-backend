@@ -11,11 +11,41 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(ai_router, prefix="/api", tags=["AI"])
-app.include_router(farmers_router, prefix="/api", tags=["Farmers"])
-app.include_router(market_router, prefix="/api", tags=["Market"])
-app.include_router(weather_router, prefix="/api", tags=["Weather"])
-app.include_router(chat_router, prefix="/api", tags=["Chat"])
+# AI ROUTER
+app.include_router(
+    ai_router,
+    prefix="/api",
+    tags=["AI"]
+)
+
+# FARMERS ROUTER
+app.include_router(
+    farmers_router,
+    prefix="/api",
+    tags=["Farmers"]
+)
+
+# MARKET ROUTER
+app.include_router(
+    market_router,
+    prefix="/api",
+    tags=["Market"]
+)
+
+# WEATHER ROUTER
+app.include_router(
+    weather_router,
+    prefix="/api",
+    tags=["Weather"]
+)
+
+# CHAT ROUTER
+app.include_router(
+    chat_router,
+    prefix="/api",
+    tags=["Chat"]
+)
+
 
 @app.get("/")
 def root():
