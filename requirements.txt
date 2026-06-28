@@ -8,3 +8,4 @@ httpx
 requests
 python-multipart
 Pillow
+stripe==12.3.0
