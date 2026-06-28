@@ -24,7 +24,7 @@ async def detect_disease(image: UploadFile = File(...)):
     diagnosis_raw = detect_crop_disease(img)
 
     # =========================
-    # STEP 3: PARSE JSON SAFELY
+    # STEP 3: SAFE JSON PARSE
     # =========================
     try:
         diagnosis = json.loads(diagnosis_raw)
@@ -40,11 +40,12 @@ async def detect_disease(image: UploadFile = File(...)):
         }
 
     # =========================
-    # STEP 4: SUPABASE RAG SEARCH
+    # STEP 4: SUPABASE RAG LOOKUP
     # =========================
     crop = diagnosis.get("crop", "")
     disease = diagnosis.get("disease", "")
 
+    # Try crop match first
     kb_response = (
         supabase
         .table("knowledge_base")
@@ -55,7 +56,7 @@ async def detect_disease(image: UploadFile = File(...)):
 
     rows = kb_response.data or []
 
-    # fallback search by disease if crop fails
+    # fallback → disease match
     if not rows:
         kb_response = (
             supabase
@@ -81,10 +82,26 @@ async def detect_disease(image: UploadFile = File(...)):
         })
 
     # =========================
-    # STEP 6: FINAL RESPONSE
+    # STEP 6: OPTIONAL IMAGE PATH
+    # =========================
+    image_url = f"uploaded/{image.filename}"
+
+    # =========================
+    # STEP 7: SAVE TO HISTORY TABLE
+    # =========================
+    supabase.table("disease_history").insert({
+        "user_id": "anonymous",  # later replace with auth
+        "image_url": image_url,
+        "crop": crop,
+        "disease": disease,
+        "confidence": diagnosis.get("confidence", "Low")
+    }).execute()
+
+    # =========================
+    # STEP 8: FINAL RESPONSE
     # =========================
     return {
         "filename": image.filename,
         "diagnosis": diagnosis,
         "knowledge_base": knowledge_base
-    }
+        }
