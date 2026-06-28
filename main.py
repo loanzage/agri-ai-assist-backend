@@ -10,9 +10,10 @@ from routers.market import router as market_router
 from routers.weather import router as weather_router
 from routers.disease_detection import router as disease_router
 from routers.marketplace import router as marketplace_router
-
-# ✅ NEW: Payments router (ADDED)
 from routers.payments import router as payment_router
+
+# ✅ NEW: Webhooks router
+from routers.webhooks import router as webhook_router
 
 
 # =========================
@@ -49,8 +50,15 @@ app.include_router(disease_router, prefix="/api", tags=["Disease Detection"])
 # Marketplace System
 app.include_router(marketplace_router, prefix="/api", tags=["Marketplace"])
 
-# 💳 Payments System (NEW)
+# Payments System
 app.include_router(payment_router, prefix="/api", tags=["Payments"])
+
+# ✅ Stripe Webhooks
+app.include_router(
+    webhook_router,
+    prefix="/api",
+    tags=["Webhooks"]
+)
 
 
 # =========================
@@ -61,4 +69,4 @@ def root():
     return {
         "message": "Agri AI Assist Backend Running",
         "status": "healthy"
-}
+    }
