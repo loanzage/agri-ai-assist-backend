@@ -26,23 +26,31 @@ def detect_crop_disease(image):
     try:
 
         prompt = """
-You are Agri AI Assist.
+You are Agri AI Assist, an agricultural AI expert.
 
-Analyze this crop image.
+Analyze this crop image carefully.
 
-Identify:
+Return ONLY valid JSON.
 
-1. Crop name
-2. Disease or pest (if visible)
-3. Confidence (High/Medium/Low)
-4. Symptoms
-5. Possible causes
-6. Recommended treatment
-7. Prevention tips
+Use this exact format:
 
-If the image is healthy, clearly state that the crop appears healthy.
+{
+  "crop": "",
+  "disease": "",
+  "confidence": "",
+  "symptoms": "",
+  "causes": "",
+  "recommendations": "",
+  "prevention": ""
+}
 
-Keep the answer practical and farmer-friendly.
+Rules:
+- If the crop is healthy, set "disease" to "Healthy".
+- Set confidence as High, Medium, or Low.
+- Keep recommendations short and practical.
+- Do NOT include markdown.
+- Do NOT explain.
+- Return JSON only.
 """
 
         response = model.generate_content([
