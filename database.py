@@ -2,19 +2,34 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client
 
-# Load environment variables from .env (local only)
+# =========================
+# LOAD ENV VARIABLES
+# =========================
 load_dotenv()
 
-# Supabase Project URL (your project)
+# =========================
+# SUPABASE CONFIG
+# =========================
 SUPABASE_URL = "https://xmdjdxwsvvdxwizokhgs.supabase.co"
 
-# IMPORTANT:
-# NEVER hardcode this in production — use Render ENV VAR instead
+# 🔐 Secure key from environment (PRODUCTION SAFE)
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Fallback (ONLY for local testing if env missing)
 if not SUPABASE_KEY:
-    SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtZGpkeHdzdnZkeHdpem9raGdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDU4MzEsImV4cCI6MjA5NzMyMTgzMX0.-An0J3CYpp_BPn1twy5lmZsCIPMIUJAcQ8FnpkHsM9U"
+    raise Exception("SUPABASE_KEY is missing in environment variables!")
 
 # Create Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+# =========================
+# STRIPE CONFIG (NEW ADDITION)
+# =========================
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+
+if not STRIPE_SECRET_KEY:
+    print("⚠️ WARNING: STRIPE_SECRET_KEY not found in environment")
+
+if not STRIPE_PUBLISHABLE_KEY:
+    print("⚠️ WARNING: STRIPE_PUBLISHABLE_KEY not found in environment")
