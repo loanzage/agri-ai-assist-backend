@@ -3,16 +3,27 @@ from database import supabase
 
 router = APIRouter()
 
-@router.post("/list-crop")
-async def list_crop(data: dict):
+# =========================
+# BUY CROP API
+# =========================
+@router.post("/buy-crop")
+async def buy_crop(data: dict):
 
-    response = supabase.table("crop_listings").insert({
+    # calculate total price
+    total_price = data["quantity"] * data["price_per_unit"]
+
+    # create order
+    order = supabase.table("marketplace_orders").insert({
+        "buyer_id": data["buyer_id"],
+        "listing_id": data["listing_id"],
         "farmer_id": data["farmer_id"],
         "crop": data["crop"],
         "quantity": data["quantity"],
-        "price_per_unit": data["price_per_unit"],
-        "location": data.get("location", ""),
-        "status": "available"
+        "total_price": total_price,
+        "status": "pending"
     }).execute()
 
-    return {"message": "Crop listed successfully"}
+    return {
+        "message": "Order placed",
+        "order": order.data
+    }
