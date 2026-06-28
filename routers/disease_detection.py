@@ -4,9 +4,8 @@ router = APIRouter()
 
 
 @router.post("/detect-disease")
-async def detect_disease(file: UploadFile = File(...)):
+async def detect_disease(image: UploadFile = File(...)):
     return {
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "message": "Image received successfully"
+        "filename": image.filename,
+        "content_type": image.content_type
     }
