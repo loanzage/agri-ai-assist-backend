@@ -1,9 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 
 router = APIRouter()
 
-@router.get("/detect-disease")
-async def test():
+
+@router.post("/detect-disease")
+async def detect_disease(file: UploadFile = File(...)):
     return {
-        "status": "Disease Detection API Working"
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "message": "Image received successfully"
     }
