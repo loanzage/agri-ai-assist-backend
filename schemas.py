@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class QuestionRequest(BaseModel):
     question: str
+    language: str = "English"
 
 
 class AIResponse(BaseModel):
