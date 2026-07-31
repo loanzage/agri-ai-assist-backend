@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 
+
 # =========================
 # ROUTERS IMPORTS
 # =========================
+
 from routers.ask_ai import router as ai_router
 from routers.chat import router as chat_router
 from routers.farmers import router as farmers_router
@@ -11,62 +13,184 @@ from routers.weather import router as weather_router
 from routers.disease_detection import router as disease_router
 from routers.marketplace import router as marketplace_router
 from routers.payments import router as payment_router
-
-# ✅ NEW: Webhooks router
 from routers.webhooks import router as webhook_router
+
+
+# NEW LUGANDA ROUTER
+from routers.luganda import router as luganda_router
+
 
 
 # =========================
 # APP INIT
 # =========================
+
 app = FastAPI(
+
     title="Agri AI Assist API",
+
     version="1.0.0"
+
 )
 
 
+
+
 # =========================
-# ROUTER REGISTRATION
+# ROUTERS
 # =========================
+
 
 # AI Chat
-app.include_router(ai_router, prefix="/api", tags=["AI"])
+app.include_router(
+
+    ai_router,
+
+    prefix="/api",
+
+    tags=["AI"]
+
+)
+
+
 
 # Chat History
-app.include_router(chat_router, prefix="/api", tags=["Chat"])
+app.include_router(
+
+    chat_router,
+
+    prefix="/api",
+
+    tags=["Chat"]
+
+)
+
+
 
 # Farmers
-app.include_router(farmers_router, prefix="/api", tags=["Farmers"])
+app.include_router(
 
-# Market Prices
-app.include_router(market_router, prefix="/api", tags=["Market"])
+    farmers_router,
+
+    prefix="/api",
+
+    tags=["Farmers"]
+
+)
+
+
+
+# Market
+app.include_router(
+
+    market_router,
+
+    prefix="/api",
+
+    tags=["Market"]
+
+)
+
+
 
 # Weather
-app.include_router(weather_router, prefix="/api", tags=["Weather"])
+app.include_router(
+
+    weather_router,
+
+    prefix="/api",
+
+    tags=["Weather"]
+
+)
+
+
 
 # Disease Detection
-app.include_router(disease_router, prefix="/api", tags=["Disease Detection"])
 
-# Marketplace System
-app.include_router(marketplace_router, prefix="/api", tags=["Marketplace"])
-
-# Payments System
-app.include_router(payment_router, prefix="/api", tags=["Payments"])
-
-# ✅ Stripe Webhooks
 app.include_router(
-    webhook_router,
+
+    disease_router,
+
     prefix="/api",
-    tags=["Webhooks"]
+
+    tags=["Disease Detection"]
+
 )
+
+
+
+# Marketplace
+
+app.include_router(
+
+    marketplace_router,
+
+    prefix="/api",
+
+    tags=["Marketplace"]
+
+)
+
+
+
+# Payments
+
+app.include_router(
+
+    payment_router,
+
+    prefix="/api",
+
+    tags=["Payments"]
+
+)
+
+
+
+# Stripe Webhooks
+
+app.include_router(
+
+    webhook_router,
+
+    prefix="/api",
+
+    tags=["Webhooks"]
+
+)
+
+
+
+# Luganda AI Explanation
+
+app.include_router(
+
+    luganda_router,
+
+    prefix="/api",
+
+    tags=["Translation"]
+
+)
+
+
 
 
 # =========================
 # ROOT CHECK
 # =========================
+
 @app.get("/")
+
 def root():
+
     return {
-        "message": "Agri AI Assist Backend Running",
-        "status": "healthy"
-    }
+
+        "message":
+        "Agri AI Assist Backend Running",
+
+        "status":
+        "healthy"
+
+}
