@@ -23,9 +23,8 @@ router = APIRouter()
 
 
 # =====================================================
-# REQUEST MODEL FOR LUGANDA EXPLANATION
+# LUGANDA REQUEST MODEL
 # =====================================================
-
 
 class LugandaRequest(BaseModel):
 
@@ -46,9 +45,8 @@ class LugandaRequest(BaseModel):
 
 
 # =====================================================
-# DISEASE DETECTION ENDPOINT
+# DISEASE DETECTION
 # =====================================================
-
 
 @router.post("/detect-disease")
 async def detect_disease(
@@ -57,25 +55,23 @@ async def detect_disease(
 
 
     """
-    Detect crop diseases using:
+    Gemini Vision Crop Diagnosis
 
-    Gemini Vision
-    +
-    Supabase Knowledge Base
-    +
-    Save History
+    Includes:
 
+    - Smart diagnosis JSON
+    - Knowledge base lookup
+    - Scan history saving
     """
 
 
 
     # =========================
-    # VALIDATE IMAGE
+    # IMAGE VALIDATION
     # =========================
 
 
     try:
-
 
         contents = await image.read()
 
@@ -93,7 +89,6 @@ async def detect_disease(
         )
 
 
-
     except Exception:
 
 
@@ -102,9 +97,10 @@ async def detect_disease(
             "success": False,
 
             "message":
-            "Invalid image. Please upload a clear crop photo."
+            "Invalid image. Upload a clear crop image."
 
         }
+
 
 
 
@@ -143,7 +139,7 @@ async def detect_disease(
 
 
     # =========================
-    # PARSE JSON
+    # JSON PARSE
     # =========================
 
 
@@ -177,6 +173,10 @@ async def detect_disease(
             "Low",
 
 
+            "severity":
+            "Unknown",
+
+
             "symptoms":
             diagnosis_raw,
 
@@ -189,11 +189,15 @@ async def detect_disease(
             "",
 
 
-            "recommendations":
+            "prevention":
             "",
 
 
-            "prevention":
+            "recovery_time":
+            "",
+
+
+            "estimated_cost":
             ""
 
         }
@@ -204,13 +208,13 @@ async def detect_disease(
 
     crop = diagnosis.get(
         "crop",
-        ""
+        "Unknown"
     )
 
 
     disease = diagnosis.get(
         "disease",
-        ""
+        "Unknown"
     )
 
 
@@ -218,7 +222,7 @@ async def detect_disease(
 
 
     # =========================
-    # LOW CONFIDENCE MESSAGE
+    # LOW CONFIDENCE WARNING
     # =========================
 
 
@@ -228,13 +232,13 @@ async def detect_disease(
     ).lower() == "low":
 
 
+        diagnosis["treatment"] += (
 
-        diagnosis["recommendations"] += (
-
-            "\n\nPlease upload a clearer image "
-            "showing affected leaves or fruits."
+            "\n\nUpload a clearer image "
+            "showing affected leaves, fruits or stem."
 
         )
+
 
 
 
@@ -317,9 +321,10 @@ async def detect_disease(
 
 
         print(
-            "Knowledge base error:",
+            "Knowledge Base Error:",
             e
         )
+
 
 
 
@@ -351,7 +356,6 @@ async def detect_disease(
         )
 
 
-
         if key not in seen:
 
 
@@ -365,6 +369,11 @@ async def detect_disease(
 
 
 
+    # =========================
+    # FORMAT KNOWLEDGE BASE
+    # =========================
+
+
     knowledge_base = []
 
 
@@ -374,15 +383,12 @@ async def detect_disease(
 
         knowledge_base.append({
 
-
             "crop":
             row.get("crop"),
 
 
-
             "topic":
             row.get("topic"),
-
 
 
             "causes":
@@ -391,12 +397,16 @@ async def detect_disease(
             ),
 
 
-
-            "recommendations":
+            "treatment":
             row.get(
                 "recommendations"
             ),
 
+
+            "prevention":
+            row.get(
+                "prevention"
+            ),
 
 
             "risk":
@@ -404,7 +414,9 @@ async def detect_disease(
                 "risk_level"
             )
 
+
         })
+
 
 
 
@@ -414,7 +426,6 @@ async def detect_disease(
     # =========================
     # SAVE HISTORY
     # =========================
-
 
 
     try:
@@ -429,27 +440,23 @@ async def detect_disease(
             "anonymous",
 
 
-
             "image_url":
             f"uploaded/{image.filename}",
-
 
 
             "crop":
             crop,
 
 
-
             "disease":
             disease,
-
 
 
             "confidence":
             diagnosis.get(
                 "confidence",
                 "Low"
-            )
+            ),
 
 
         }).execute()
@@ -470,18 +477,21 @@ async def detect_disease(
 
 
 
-    return {
 
+    # =========================
+    # FINAL RESPONSE
+    # =========================
+
+
+    return {
 
 
         "success":
         True,
 
 
-
         "filename":
         image.filename,
-
 
 
         "diagnosis":
@@ -500,7 +510,7 @@ async def detect_disease(
 
 
         "message":
-        "Disease analysis completed."
+        "Smart crop diagnosis completed."
 
     }
 
@@ -523,8 +533,8 @@ async def luganda_explanation(
 
 
     """
-    Generate full Luganda agricultural explanation
-    using Gemini AI.
+    Generate complete Luganda explanation
+    from Gemini AI.
     """
 
 
@@ -532,10 +542,10 @@ async def luganda_explanation(
     explanation = generate_luganda_explanation(
 
 
-        disease=request.disease,
-
-
         crop=request.crop,
+
+
+        disease=request.disease,
 
 
         symptoms=request.symptoms,
@@ -565,9 +575,8 @@ async def luganda_explanation(
         "Luganda",
 
 
-
         "explanation":
         explanation
 
 
-        }
+    }
