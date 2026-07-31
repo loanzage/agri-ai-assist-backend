@@ -1,238 +1,573 @@
 from fastapi import APIRouter, UploadFile, File
+from pydantic import BaseModel
+
 from PIL import Image
 import io
 import json
 
-from ai_service import detect_crop_disease
+
+from ai_service import (
+    detect_crop_disease,
+    generate_luganda_explanation
+)
+
+
 from database import supabase
+
+
 
 router = APIRouter()
 
 
+
+
+
+# =====================================================
+# REQUEST MODEL FOR LUGANDA EXPLANATION
+# =====================================================
+
+
+class LugandaRequest(BaseModel):
+
+    crop: str
+
+    disease: str
+
+    symptoms: str = ""
+
+    causes: str = ""
+
+    treatment: str = ""
+
+    prevention: str = ""
+
+
+
+
+
+# =====================================================
+# DISEASE DETECTION ENDPOINT
+# =====================================================
+
+
 @router.post("/detect-disease")
-async def detect_disease(image: UploadFile = File(...)):
+async def detect_disease(
+        image: UploadFile = File(...)
+):
+
+
     """
-    Detect crop diseases using Gemini Vision
-    + Local Knowledge Base (RAG)
-    + Save scan history
+    Detect crop diseases using:
+
+    Gemini Vision
+    +
+    Supabase Knowledge Base
+    +
+    Save History
+
     """
 
+
+
     # =========================
-    # STEP 1: VALIDATE IMAGE
+    # VALIDATE IMAGE
     # =========================
+
 
     try:
+
+
         contents = await image.read()
 
-        img = Image.open(io.BytesIO(contents))
+
+        img = Image.open(
+            io.BytesIO(contents)
+        )
+
+
         img.verify()
 
-        img = Image.open(io.BytesIO(contents))
+
+        img = Image.open(
+            io.BytesIO(contents)
+        )
+
+
 
     except Exception:
+
+
         return {
+
             "success": False,
-            "message": "Invalid image uploaded. Please upload a clear crop image."
+
+            "message":
+            "Invalid image. Please upload a clear crop photo."
+
         }
 
+
+
+
     # =========================
-    # STEP 2: GEMINI VISION
+    # GEMINI VISION
     # =========================
 
-    diagnosis_raw = detect_crop_disease(img)
 
-    # Remove markdown if Gemini returns ```json
-    diagnosis_raw = (
-        diagnosis_raw
-        .replace("```json", "")
-        .replace("```", "")
-        .strip()
+    diagnosis_raw = detect_crop_disease(
+        img
     )
 
+
+
+    diagnosis_raw = (
+
+        diagnosis_raw
+
+        .replace(
+            "```json",
+            ""
+        )
+
+        .replace(
+            "```",
+            ""
+        )
+
+        .strip()
+
+    )
+
+
+
+
+
     # =========================
-    # STEP 3: SAFE JSON PARSE
+    # PARSE JSON
     # =========================
+
 
     try:
 
-        diagnosis = json.loads(diagnosis_raw)
+
+        diagnosis = json.loads(
+            diagnosis_raw
+        )
+
 
     except Exception:
 
+
         diagnosis = {
-            "crop": "Unknown",
-            "disease": "Unknown",
-            "confidence": "Low",
-            "symptoms": diagnosis_raw,
-            "causes": "",
-            "recommendations": "",
-            "prevention": ""
+
+
+            "crop":
+            "Unknown",
+
+
+            "status":
+            "Uncertain",
+
+
+            "disease":
+            "Unknown",
+
+
+            "confidence":
+            "Low",
+
+
+            "symptoms":
+            diagnosis_raw,
+
+
+            "causes":
+            "",
+
+
+            "treatment":
+            "",
+
+
+            "recommendations":
+            "",
+
+
+            "prevention":
+            ""
+
         }
 
-    crop = diagnosis.get("crop", "").strip()
-    disease = diagnosis.get("disease", "").strip()
+
+
+
+
+    crop = diagnosis.get(
+        "crop",
+        ""
+    )
+
+
+    disease = diagnosis.get(
+        "disease",
+        ""
+    )
+
+
+
+
 
     # =========================
-    # STEP 4: LOW CONFIDENCE CHECK
+    # LOW CONFIDENCE MESSAGE
     # =========================
 
-    confidence = diagnosis.get(
+
+    if diagnosis.get(
         "confidence",
-        "Low"
-    ).lower()
+        ""
+    ).lower() == "low":
 
-    if confidence == "low":
 
-        diagnosis["recommendations"] = (
-            diagnosis.get("recommendations", "")
-            + "\n\nPlease upload a clearer close-up image of the affected leaves, stem, fruit or entire plant."
+
+        diagnosis["recommendations"] += (
+
+            "\n\nPlease upload a clearer image "
+            "showing affected leaves or fruits."
+
         )
 
+
+
+
+
+
     # =========================
-    # STEP 5: SUPABASE RAG LOOKUP
+    # KNOWLEDGE BASE SEARCH
     # =========================
+
 
     rows = []
 
+
+
     try:
 
-        # Search crop
 
         if crop:
 
+
             response = (
+
                 supabase
-                .table("knowledge_base")
+
+                .table(
+                    "knowledge_base"
+                )
+
                 .select("*")
-                .ilike("crop", f"%{crop}%")
+
+                .ilike(
+                    "crop",
+                    f"%{crop}%"
+                )
+
                 .execute()
+
             )
 
-            rows.extend(response.data or [])
 
-        # Search disease/topic
+            rows.extend(
+                response.data or []
+            )
+
+
+
+
 
         if disease:
 
+
             response = (
+
                 supabase
-                .table("knowledge_base")
+
+                .table(
+                    "knowledge_base"
+                )
+
                 .select("*")
-                .ilike("topic", f"%{disease}%")
+
+                .ilike(
+                    "topic",
+                    f"%{disease}%"
+                )
+
                 .execute()
+
             )
 
-            rows.extend(response.data or [])
+
+            rows.extend(
+                response.data or []
+            )
+
+
 
     except Exception as e:
 
-        print("SUPABASE LOOKUP ERROR:", e)
+
+        print(
+            "Knowledge base error:",
+            e
+        )
+
+
+
+
+
+
 
     # =========================
     # REMOVE DUPLICATES
     # =========================
 
+
     unique_rows = []
+
 
     seen = set()
 
-    for r in rows:
+
+
+    for row in rows:
+
 
         key = (
-            r.get("crop"),
-            r.get("topic")
+
+            row.get("crop"),
+
+            row.get("topic")
+
         )
+
+
 
         if key not in seen:
 
+
             seen.add(key)
 
-            unique_rows.append(r)
 
-    # =========================
-    # STEP 6: FORMAT KNOWLEDGE
-    # =========================
+            unique_rows.append(row)
+
+
+
+
+
 
     knowledge_base = []
 
-    for r in unique_rows:
+
+
+    for row in unique_rows:
+
 
         knowledge_base.append({
 
+
             "crop":
-                r.get("crop"),
+            row.get("crop"),
+
+
 
             "topic":
-                r.get("topic"),
+            row.get("topic"),
+
+
 
             "causes":
-                r.get("causes_or_details"),
+            row.get(
+                "causes_or_details"
+            ),
+
+
 
             "recommendations":
-                r.get("recommendations"),
+            row.get(
+                "recommendations"
+            ),
+
+
 
             "risk":
-                r.get("risk_level")
+            row.get(
+                "risk_level"
+            )
 
         })
 
+
+
+
+
+
     # =========================
-    # STEP 7: SAVE HISTORY
+    # SAVE HISTORY
     # =========================
 
-    image_url = f"uploaded/{image.filename}"
+
 
     try:
+
 
         supabase.table(
             "disease_history"
         ).insert({
 
+
             "user_id":
-                "anonymous",
+            "anonymous",
+
+
 
             "image_url":
-                image_url,
+            f"uploaded/{image.filename}",
+
+
 
             "crop":
-                crop,
+            crop,
+
+
 
             "disease":
-                disease,
+            disease,
+
+
 
             "confidence":
-                diagnosis.get(
-                    "confidence",
-                    "Low"
-                )
+            diagnosis.get(
+                "confidence",
+                "Low"
+            )
+
 
         }).execute()
 
+
+
     except Exception as e:
 
-        print("History save failed:", e)
 
-    # =========================
-    # STEP 8: FINAL RESPONSE
-    # =========================
+        print(
+            "History save failed:",
+            e
+        )
+
+
+
+
+
+
 
     return {
 
-        "success": True,
+
+
+        "success":
+        True,
+
+
 
         "filename":
-            image.filename,
+        image.filename,
+
+
 
         "diagnosis":
-            diagnosis,
+        diagnosis,
+
+
 
         "knowledge_base":
-            knowledge_base,
+        knowledge_base,
+
+
 
         "source":
-            "Gemini Vision + Local Knowledge Base",
+        "Gemini Vision + Agri AI Knowledge Base",
+
+
 
         "message":
-            "Disease analysis completed successfully."
+        "Disease analysis completed."
 
     }
+
+
+
+
+
+
+
+
+# =====================================================
+# LUGANDA EXPLANATION ENDPOINT
+# =====================================================
+
+
+@router.post("/luganda-explanation")
+async def luganda_explanation(
+        request: LugandaRequest
+):
+
+
+    """
+    Generate full Luganda agricultural explanation
+    using Gemini AI.
+    """
+
+
+
+    explanation = generate_luganda_explanation(
+
+
+        disease=request.disease,
+
+
+        crop=request.crop,
+
+
+        symptoms=request.symptoms,
+
+
+        causes=request.causes,
+
+
+        treatment=request.treatment,
+
+
+        prevention=request.prevention
+
+
+    )
+
+
+
+    return {
+
+
+        "success":
+        True,
+
+
+        "language":
+        "Luganda",
+
+
+
+        "explanation":
+        explanation
+
+
+        }
