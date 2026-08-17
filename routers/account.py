@@ -29,17 +29,49 @@ if not SUPABASE_SERVICE_ROLE_KEY:
     )
 
 
-# IMPORTANT:
-# This client uses the SERVICE ROLE KEY.
-#
-# It must ONLY exist on the FastAPI backend.
-# Never put this key inside Flutter.
-# ============================================================
-
 supabase: Client = create_client(
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
 )
+
+
+# ============================================================
+# HELPER
+# ============================================================
+
+def delete_rows(
+    table_name: str,
+    column_name: str,
+    user_id: str,
+):
+    """
+    Delete rows belonging to the authenticated user.
+
+    IMPORTANT:
+    Any failure raises an exception immediately.
+
+    This means the Auth account will NOT be deleted if
+    database cleanup fails.
+    """
+
+    print(
+        f"🗑️ Deleting {table_name}.{column_name} "
+        f"for user {user_id}"
+    )
+
+    response = (
+        supabase
+        .table(table_name)
+        .delete()
+        .eq(column_name, user_id)
+        .execute()
+    )
+
+    print(
+        f"✅ {table_name}.{column_name} cleanup completed."
+    )
+
+    return response
 
 
 # ============================================================
@@ -51,7 +83,7 @@ async def delete_account(
     authorization: str | None = Header(default=None),
 ):
     """
-    Permanently delete the currently authenticated user.
+    Permanently delete the authenticated user's account.
 
     Flutter sends:
 
@@ -59,17 +91,17 @@ async def delete_account(
 
     The backend:
 
-        1. Verifies the access token.
-        2. Gets the real Supabase Auth user ID.
-        3. Deletes that user's Storage files.
-        4. Deletes that user's application data.
-        5. Deletes the Supabase Auth account.
+    1. Verifies the access token.
+    2. Deletes user-owned storage.
+    3. Deletes user-owned database records.
+    4. Deletes the Supabase Auth account.
 
-    The service-role key is used ONLY by this backend.
+    If ANY cleanup step fails, the process stops and the
+    Auth account is NOT deleted.
     """
 
     # ========================================================
-    # 1. VERIFY AUTHORIZATION HEADER
+    # VERIFY AUTHORIZATION HEADER
     # ========================================================
 
     if not authorization:
@@ -99,7 +131,7 @@ async def delete_account(
 
 
     # ========================================================
-    # 2. VERIFY SUPABASE USER
+    # VERIFY SUPABASE USER
     # ========================================================
 
     try:
@@ -120,7 +152,10 @@ async def delete_account(
 
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired authentication token.",
+            detail=(
+                "Invalid or expired "
+                "authentication token."
+            ),
         )
 
 
@@ -136,32 +171,37 @@ async def delete_account(
 
 
     print(
-        f"🗑️ Starting account deletion for user: {user_id}"
+        "=================================================="
+    )
+
+    print(
+        f"🗑️ ACCOUNT DELETION STARTED: {user_id}"
+    )
+
+    print(
+        "=================================================="
     )
 
 
     # ========================================================
-    # 3. DELETE DISEASE SCAN STORAGE FILES
+    # STORAGE CLEANUP
     # ========================================================
     #
-    # Storage structure:
+    # Expected structure:
     #
     # disease-scans/
     #     USER_ID/
     #         scan_123.jpg
-    #         scan_456.jpg
     #
-    # We ONLY delete:
-    #
-    # disease-scans/USER_ID/
-    #
-    # Other farmers' images remain untouched.
+    # Only the authenticated user's folder is touched.
     # ========================================================
 
     try:
 
-        storage = supabase.storage.from_(
-            "disease-scans"
+        storage = (
+            supabase
+            .storage
+            .from_("disease-scans")
         )
 
 
@@ -197,44 +237,49 @@ async def delete_account(
 
 
                 print(
-                    "✅ Disease scan images deleted."
+                    f"✅ Deleted "
+                    f"{len(file_paths)} "
+                    f"disease scan images."
+                )
+
+            else:
+
+                print(
+                    "ℹ️ No disease scan files found."
                 )
 
         else:
 
             print(
-                "ℹ️ No disease scan images found."
+                "ℹ️ No disease scan storage folder found."
             )
 
 
     except Exception as e:
 
         print(
-            f"❌ Disease storage deletion failed: {e}"
+            f"❌ Storage cleanup failed: {e}"
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete disease scan images.",
+            detail=(
+                "Account deletion stopped because "
+                "disease scan storage could not be cleaned."
+            ),
         )
 
 
     # ========================================================
-    # 4. DELETE DISEASE HISTORY
+    # DISEASE HISTORY
     # ========================================================
 
     try:
 
-        supabase.table(
-            "disease_history"
-        ).delete().eq(
+        delete_rows(
+            "disease_history",
             "user_id",
             user_id,
-        ).execute()
-
-
-        print(
-            "✅ Disease history deleted."
         )
 
     except Exception as e:
@@ -245,116 +290,225 @@ async def delete_account(
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete disease history.",
+            detail=(
+                "Account deletion stopped because "
+                "disease history could not be deleted."
+            ),
         )
 
 
     # ========================================================
-    # 5. DELETE FARMER PROFILE
+    # ORDERS
     # ========================================================
-
-    try:
-
-        supabase.table(
-            "farmers"
-        ).delete().eq(
-            "user_id",
-            user_id,
-        ).execute()
-
-
-        print(
-            "✅ Farmer profile deleted."
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Farmer profile deletion failed: {e}"
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Unable to delete farmer profile.",
-        )
-
-
-    # ========================================================
-    # 6. DELETE PUBLIC PROFILE
+    #
+    # The authenticated farmer can appear as:
+    #
+    # farmer_id
+    # buyer_id
+    # seller_id
+    #
+    # We remove orders associated with this account.
+    #
     # ========================================================
 
     try:
 
-        supabase.table(
-            "profiles"
-        ).delete().eq(
-            "id",
-            user_id,
-        ).execute()
-
-
         print(
-            "✅ Public profile deleted."
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Public profile deletion failed: {e}"
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Unable to delete user profile.",
+            f"🗑️ Deleting orders for user {user_id}"
         )
 
 
-    # ========================================================
-    # 7. DELETE FARMER WALLET
-    # ========================================================
-
-    try:
-
+        # Orders where user is the farmer
         supabase.table(
-            "wallets"
+            "orders"
         ).delete().eq(
             "farmer_id",
             user_id,
         ).execute()
 
 
+        # Orders where user is the buyer
+        supabase.table(
+            "orders"
+        ).delete().eq(
+            "buyer_id",
+            user_id,
+        ).execute()
+
+
+        # Orders where user is the seller
+        supabase.table(
+            "orders"
+        ).delete().eq(
+            "seller_id",
+            user_id,
+        ).execute()
+
+
         print(
-            "✅ Farmer wallet deleted."
+            "✅ Orders deleted."
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"❌ Orders deletion failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Account deletion stopped because "
+                "orders could not be deleted."
+            ),
+        )
+
+
+    # ========================================================
+    # PRODUCT PROMOTIONS
+    # ========================================================
+
+    try:
+
+        delete_rows(
+            "product_promotions",
+            "seller_id",
+            user_id,
         )
 
     except Exception as e:
 
         print(
-            f"❌ Wallet deletion failed: {e}"
+            f"❌ Product promotions deletion failed: {e}"
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete farmer wallet.",
+            detail=(
+                "Account deletion stopped because "
+                "product promotions could not be deleted."
+            ),
         )
 
 
     # ========================================================
-    # 8. DELETE FARMER WITHDRAWALS
+    # PRODUCTS
+    # ========================================================
+    #
+    # A farmer's products can be associated through:
+    #
+    # farmer_id
+    # seller_id
+    #
+    # Delete both ownership types.
+    #
     # ========================================================
 
     try:
 
+        print(
+            f"🗑️ Deleting products for user {user_id}"
+        )
+
+
         supabase.table(
-            "withdrawals"
+            "products"
         ).delete().eq(
             "farmer_id",
             user_id,
         ).execute()
 
 
+        supabase.table(
+            "products"
+        ).delete().eq(
+            "seller_id",
+            user_id,
+        ).execute()
+
+
         print(
-            "✅ Farmer withdrawals deleted."
+            "✅ Products deleted."
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"❌ Product deletion failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Account deletion stopped because "
+                "products could not be deleted."
+            ),
+        )
+
+
+    # ========================================================
+    # TRANSACTIONS
+    # ========================================================
+    #
+    # Farmer can appear as farmer_id or seller_id.
+    #
+    # ========================================================
+
+    try:
+
+        print(
+            f"🗑️ Deleting transactions for user {user_id}"
+        )
+
+
+        supabase.table(
+            "transactions"
+        ).delete().eq(
+            "farmer_id",
+            user_id,
+        ).execute()
+
+
+        supabase.table(
+            "transactions"
+        ).delete().eq(
+            "seller_id",
+            user_id,
+        ).execute()
+
+
+        print(
+            "✅ Transactions deleted."
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"❌ Transaction deletion failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Account deletion stopped because "
+                "transactions could not be deleted."
+            ),
+        )
+
+
+    # ========================================================
+    # WITHDRAWALS
+    # ========================================================
+
+    try:
+
+        delete_rows(
+            "withdrawals",
+            "farmer_id",
+            user_id,
         )
 
     except Exception as e:
@@ -365,88 +519,137 @@ async def delete_account(
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete withdrawals.",
+            detail=(
+                "Account deletion stopped because "
+                "withdrawals could not be deleted."
+            ),
         )
 
 
     # ========================================================
-    # 9. DELETE FARMER TRANSACTIONS
+    # WALLET
+    # ========================================================
+    #
+    # Farmer wallet can use farmer_id.
+    #
+    # seller_id is also present in the schema.
+    #
     # ========================================================
 
     try:
 
+        print(
+            f"🗑️ Deleting wallets for user {user_id}"
+        )
+
+
         supabase.table(
-            "transactions"
+            "wallets"
         ).delete().eq(
             "farmer_id",
             user_id,
         ).execute()
 
 
-        print(
-            "✅ Farmer transactions deleted."
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Transactions deletion failed: {e}"
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Unable to delete transactions.",
-        )
-
-
-    # ========================================================
-    # 10. DELETE FARMER PRODUCTS
-    # ========================================================
-    #
-    # We only delete products where:
-    #
-    # farmer_id = current user
-    #
-    # This does NOT delete another supplier's products.
-    # ========================================================
-
-    try:
-
         supabase.table(
-            "products"
+            "wallets"
         ).delete().eq(
-            "farmer_id",
+            "seller_id",
             user_id,
         ).execute()
 
 
         print(
-            "✅ Farmer products deleted."
+            "✅ Wallet records deleted."
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"❌ Wallet deletion failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Account deletion stopped because "
+                "wallet records could not be deleted."
+            ),
+        )
+
+
+    # ========================================================
+    # FARMER PROFILE
+    # ========================================================
+
+    try:
+
+        delete_rows(
+            "farmers",
+            "user_id",
+            user_id,
         )
 
     except Exception as e:
 
         print(
-            f"❌ Farmer products deletion failed: {e}"
+            f"❌ Farmer profile deletion failed: {e}"
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete farmer products.",
+            detail=(
+                "Account deletion stopped because "
+                "farmer profile could not be deleted."
+            ),
         )
 
 
     # ========================================================
-    # 11. DELETE AUTH ACCOUNT
-    # ========================================================
-    #
-    # THIS is the critical operation.
-    #
-    # The service-role key allows the backend to delete
-    # the Supabase Auth user.
+    # PUBLIC PROFILE
     # ========================================================
 
     try:
+
+        delete_rows(
+            "profiles",
+            "id",
+            user_id,
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ Public profile deletion failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Account deletion stopped because "
+                "public profile could not be deleted."
+            ),
+        )
+
+
+    # ========================================================
+    # AUTH ACCOUNT
+    # ========================================================
+    #
+    # IMPORTANT:
+    #
+    # We reach this section ONLY if all previous cleanup
+    # operations completed successfully.
+    #
+    # ========================================================
+
+    try:
+
+        print(
+            f"🗑️ Deleting Supabase Auth user: {user_id}"
+        )
+
 
         supabase.auth.admin.delete_user(
             user_id
@@ -457,6 +660,7 @@ async def delete_account(
             f"✅ Supabase Auth account deleted: {user_id}"
         )
 
+
     except Exception as e:
 
         print(
@@ -465,22 +669,32 @@ async def delete_account(
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete authentication account.",
+            detail=(
+                "Your account data was cleaned, "
+                "but the authentication account could "
+                "not be deleted. Please contact support."
+            ),
         )
 
 
     # ========================================================
-    # 12. SUCCESS
+    # SUCCESS
     # ========================================================
 
+    print(
+        "=================================================="
+    )
+
+    print(
+        f"✅ ACCOUNT DELETION COMPLETE: {user_id}"
+    )
+
+    print(
+        "=================================================="
+    )
+
+
     return {
-
         "success": True,
-
-        "message":
-            "Account deleted successfully.",
-
-        "user_id":
-            user_id,
-
-            }
+        "message": "Account deleted successfully.",
+        }
