@@ -16,9 +16,18 @@ from routers.payments import router as payment_router
 from routers.webhooks import router as webhook_router
 
 
-# NEW LUGANDA ROUTER
+# =========================
+# LUGANDA ROUTER
+# =========================
+
 from routers.luganda import router as luganda_router
 
+
+# =========================
+# ACCOUNT MANAGEMENT ROUTER
+# =========================
+
+from routers.account import router as account_router
 
 
 # =========================
@@ -34,14 +43,15 @@ app = FastAPI(
 )
 
 
-
-
 # =========================
 # ROUTERS
 # =========================
 
 
-# AI Chat
+# =========================================================
+# AI CHAT
+# =========================================================
+
 app.include_router(
 
     ai_router,
@@ -53,8 +63,10 @@ app.include_router(
 )
 
 
+# =========================================================
+# CHAT HISTORY
+# =========================================================
 
-# Chat History
 app.include_router(
 
     chat_router,
@@ -66,8 +78,10 @@ app.include_router(
 )
 
 
+# =========================================================
+# FARMERS
+# =========================================================
 
-# Farmers
 app.include_router(
 
     farmers_router,
@@ -79,8 +93,10 @@ app.include_router(
 )
 
 
+# =========================================================
+# MARKET
+# =========================================================
 
-# Market
 app.include_router(
 
     market_router,
@@ -92,8 +108,10 @@ app.include_router(
 )
 
 
+# =========================================================
+# WEATHER
+# =========================================================
 
-# Weather
 app.include_router(
 
     weather_router,
@@ -105,8 +123,9 @@ app.include_router(
 )
 
 
-
-# Disease Detection
+# =========================================================
+# DISEASE DETECTION
+# =========================================================
 
 app.include_router(
 
@@ -119,8 +138,9 @@ app.include_router(
 )
 
 
-
-# Marketplace
+# =========================================================
+# MARKETPLACE
+# =========================================================
 
 app.include_router(
 
@@ -133,8 +153,9 @@ app.include_router(
 )
 
 
-
-# Payments
+# =========================================================
+# PAYMENTS
+# =========================================================
 
 app.include_router(
 
@@ -147,8 +168,9 @@ app.include_router(
 )
 
 
-
-# Stripe Webhooks
+# =========================================================
+# WEBHOOKS
+# =========================================================
 
 app.include_router(
 
@@ -161,8 +183,9 @@ app.include_router(
 )
 
 
-
-# Luganda AI Explanation
+# =========================================================
+# LUGANDA AI EXPLANATION
+# =========================================================
 
 app.include_router(
 
@@ -175,6 +198,19 @@ app.include_router(
 )
 
 
+# =========================================================
+# ACCOUNT MANAGEMENT
+# =========================================================
+
+app.include_router(
+
+    account_router,
+
+    prefix="/api",
+
+    tags=["Account"]
+
+)
 
 
 # =========================
@@ -193,4 +229,4 @@ def root():
         "status":
         "healthy"
 
-}
+    }
