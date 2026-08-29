@@ -1,7 +1,54 @@
+import os
+
 from fastapi import APIRouter, HTTPException, Query
+from dotenv import load_dotenv
+from supabase import create_client
 
-from database import supabase
 
+# ============================================================
+# LOAD ENVIRONMENT VARIABLES
+# ============================================================
+
+load_dotenv()
+
+
+# ============================================================
+# OLD / LEGACY SUPABASE DATABASE
+#
+# Market Intelligence continues to use the existing
+# database where the market tables and RPC functions already
+# exist.
+#
+# Project:
+# xmdjdxwsvvdxwizokhgs
+# ============================================================
+
+LEGACY_SUPABASE_URL = (
+    "https://xmdjdxwsvvdxwizokhgs.supabase.co"
+)
+
+LEGACY_SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+
+if not LEGACY_SUPABASE_KEY:
+    raise Exception(
+        "SUPABASE_KEY is missing in environment variables!"
+    )
+
+
+# ============================================================
+# LEGACY SUPABASE CLIENT
+# ============================================================
+
+legacy_supabase = create_client(
+    LEGACY_SUPABASE_URL,
+    LEGACY_SUPABASE_KEY
+)
+
+
+# ============================================================
+# ROUTER
+# ============================================================
 
 router = APIRouter()
 
@@ -10,20 +57,34 @@ router = APIRouter()
 # MARKET INTELLIGENCE
 #
 # GET:
+#
 # /api/market-intelligence/{crop_slug}
 #
-# This backend uses the existing Supabase client from
-# database.py.
+# Example:
 #
-# database.py is currently connected to:
+# /api/market-intelligence/beans
 #
-# https://xmdjdxwsvvdxwizokhgs.supabase.co
+# Optional parameters:
 #
-# The actual Market Intelligence calculations remain inside
-# Supabase PostgreSQL functions.
+# district
+# market
+# price_type
+# supply_pressure
+# storage_risk
 #
+# This calls:
+#
+# generate_market_recommendation(
+#     p_crop_slug,
+#     p_district,
+#     p_market,
+#     p_price_type,
+#     p_supply_pressure,
+#     p_storage_risk
+# )
+#
+# from the OLD Supabase database.
 # ============================================================
-
 
 @router.get("/market-intelligence/{crop_slug}")
 async def get_market_intelligence(
@@ -31,32 +92,36 @@ async def get_market_intelligence(
 
     district: str | None = Query(
         None,
-        description="Optional farmer district"
+        description="District used to select the market observation"
     ),
 
     market: str | None = Query(
         None,
-        description="Optional market"
+        description="Market used to select the market observation"
     ),
 
     price_type: str | None = Query(
         None,
-        description="Optional price type"
+        description="Price type such as wholesale or retail"
     ),
 
     supply_pressure: str = Query(
         "unknown",
-        description="Supply pressure: high, medium, low, or unknown"
+        description=(
+            "Supply pressure: high, medium, low, or unknown"
+        )
     ),
 
     storage_risk: str = Query(
         "unknown",
-        description="Storage risk: high, medium, low, or unknown"
+        description=(
+            "Storage risk: high, medium, low, or unknown"
+        )
     ),
 ):
 
     # ========================================================
-    # VALIDATE CROP
+    # BASIC VALIDATION
     # ========================================================
 
     if not crop_slug or not crop_slug.strip():
@@ -75,19 +140,19 @@ async def get_market_intelligence(
 
     district = (
         district.strip()
-        if district
+        if district and district.strip()
         else None
     )
 
     market = (
         market.strip()
-        if market
+        if market and market.strip()
         else None
     )
 
     price_type = (
         price_type.strip().lower()
-        if price_type
+        if price_type and price_type.strip()
         else None
     )
 
@@ -105,67 +170,61 @@ async def get_market_intelligence(
 
 
     # ========================================================
-    # VALIDATE SUPPLY PRESSURE
+    # NORMALIZE SUPPLY PRESSURE
     # ========================================================
 
-    if supply_pressure not in {
+    if supply_pressure not in (
         "high",
         "medium",
         "low",
         "unknown"
-    }:
+    ):
 
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid supply pressure. "
-                "Use high, medium, low, or unknown."
-            )
-        )
+        supply_pressure = "unknown"
 
 
     # ========================================================
-    # VALIDATE STORAGE RISK
+    # NORMALIZE STORAGE RISK
     # ========================================================
 
-    if storage_risk not in {
+    if storage_risk not in (
         "high",
         "medium",
         "low",
         "unknown"
-    }:
+    ):
 
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid storage risk. "
-                "Use high, medium, low, or unknown."
-            )
-        )
+        storage_risk = "unknown"
 
 
     # ========================================================
-    # CALL EXISTING SUPABASE FUNCTION
+    # CALL OLD DATABASE RPC
     #
     # IMPORTANT:
     #
-    # We call the HIGH-LEVEL function:
+    # We deliberately call the HIGH-LEVEL function
+    # generate_market_recommendation().
     #
-    # generate_market_recommendation()
+    # That function already:
     #
-    # It internally calls:
+    # 1. Gets market price context
+    # 2. Finds latest observation
+    # 3. Finds previous observation
+    # 4. Calculates price change
+    # 5. Resolves trend
+    # 6. Calculates recommendation score
+    # 7. Generates explanation
+    # 8. Saves recommendation
+    # 9. Returns farmer-facing recommendation
     #
-    # get_market_price_context()
-    # resolve_market_trend()
-    # calculate_market_recommendation()
-    # generate_market_explanation()
-    #
+    # Therefore FastAPI does not duplicate any of
+    # that business logic.
     # ========================================================
 
     try:
 
         response = (
-            supabase
+            legacy_supabase
             .rpc(
                 "generate_market_recommendation",
                 {
@@ -182,12 +241,16 @@ async def get_market_intelligence(
 
     except Exception as e:
 
+        # ====================================================
+        # LOG DATABASE ERROR
+        # ====================================================
+
         print(
             "============================================================"
         )
 
         print(
-            "MARKET INTELLIGENCE RPC ERROR"
+            "MARKET INTELLIGENCE LEGACY DATABASE ERROR"
         )
 
         print(
@@ -203,13 +266,32 @@ async def get_market_intelligence(
         )
 
         print(
+            f"Crop: {crop_slug}"
+        )
+
+        print(
+            f"District: {district}"
+        )
+
+        print(
+            f"Market: {market}"
+        )
+
+        print(
+            f"Price type: {price_type}"
+        )
+
+        print(
             "============================================================"
         )
+
 
         raise HTTPException(
             status_code=500,
             detail={
-                "message": "Market intelligence RPC failed.",
+                "message": (
+                    "Market intelligence database request failed."
+                ),
                 "error_type": type(e).__name__,
                 "error": str(e),
             }
@@ -225,25 +307,30 @@ async def get_market_intelligence(
         raise HTTPException(
             status_code=500,
             detail=(
-                "Market intelligence returned no response."
+                "Market intelligence returned no database response."
             )
         )
 
 
-    print(
-        "============================================================"
-    )
-
-    print(
-        "MARKET INTELLIGENCE RESPONSE"
-    )
+    # ========================================================
+    # DEBUG RESPONSE
+    # ========================================================
 
     print(
         "============================================================"
     )
 
     print(
-        f"Response type: {type(response.data).__name__}"
+        "MARKET INTELLIGENCE LEGACY DATABASE RESPONSE"
+    )
+
+    print(
+        "============================================================"
+    )
+
+    print(
+        f"Response data type: "
+        f"{type(response.data).__name__}"
     )
 
     print(
@@ -275,9 +362,15 @@ async def get_market_intelligence(
 
     # ========================================================
     # JSONB VALIDATION
+    #
+    # generate_market_recommendation() RETURNS jsonb.
+    #
+    # Supabase Python client normally converts this into
+    # a Python dictionary.
     # ========================================================
 
     result = response.data
+
 
     if not isinstance(result, dict):
 
@@ -285,23 +378,11 @@ async def get_market_intelligence(
             status_code=500,
             detail={
                 "message": (
-                    "Invalid Market Intelligence response."
+                    "Invalid market intelligence response."
                 ),
                 "response_type": type(result).__name__,
                 "response": str(result),
             }
-        )
-
-
-    # ========================================================
-    # SUPABASE FUNCTION REPORTED NO DATA
-    # ========================================================
-
-    if result.get("status") == "no_market_data":
-
-        raise HTTPException(
-            status_code=404,
-            detail=result
         )
 
 
