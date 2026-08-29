@@ -9,6 +9,7 @@ from routers.ask_ai import router as ai_router
 from routers.chat import router as chat_router
 from routers.farmers import router as farmers_router
 from routers.market import router as market_router
+from routers.market_intelligence import router as market_intelligence_router
 from routers.weather import router as weather_router
 from routers.disease_detection import router as disease_router
 from routers.marketplace import router as marketplace_router
@@ -104,6 +105,28 @@ app.include_router(
     prefix="/api",
 
     tags=["Market"]
+
+)
+
+
+# =========================================================
+# MARKET INTELLIGENCE
+#
+# AI-powered crop price analysis and
+# farmer selling recommendations.
+#
+# This router retrieves market intelligence
+# from the legacy Supabase database configured
+# inside routers/market_intelligence.py.
+# =========================================================
+
+app.include_router(
+
+    market_intelligence_router,
+
+    prefix="/api",
+
+    tags=["Market Intelligence"]
 
 )
 
