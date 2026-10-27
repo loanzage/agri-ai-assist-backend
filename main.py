@@ -12,6 +12,7 @@ from routers.market import router as market_router
 from routers.market_intelligence import router as market_intelligence_router
 from routers.weather import router as weather_router
 from routers.disease_detection import router as disease_router
+from routers.coffee_grading import router as coffee_grading_router
 from routers.marketplace import router as marketplace_router
 from routers.payments import router as payment_router
 from routers.webhooks import router as webhook_router
@@ -158,6 +159,16 @@ app.include_router(
 
     tags=["Disease Detection"]
 
+)
+
+# =========================================================
+# COFFEE BEAN VISUAL GRADING
+# =========================================================
+
+app.include_router(
+    coffee_grading_router,
+    prefix="/api",
+    tags=["Coffee Grading"]
 )
 
 
