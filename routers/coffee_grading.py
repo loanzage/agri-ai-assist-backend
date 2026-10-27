@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from ai_service import model
-from database import supabase
+from database import auth_supabase
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -116,11 +116,19 @@ async def grade_coffee(
     access_token = authorization[len("Bearer "):].strip()
     if not access_token:
         raise HTTPException(status_code=401, detail="Missing access token.")
+    if auth_supabase is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Coffee grading authentication is not configured on the server.",
+        )
     try:
-        user_response = supabase.auth.get_user(access_token)
+        user_response = auth_supabase.auth.get_user(access_token)
         user = user_response.user
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired sign-in session. Please sign in again.")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired sign-in session. Please sign in again.",
+        )
     if user is None:
         raise HTTPException(status_code=401, detail="Authenticated user not found.")
     _check_user_rate_limit(str(user.id))
