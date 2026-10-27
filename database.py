@@ -21,6 +21,19 @@ if not SUPABASE_KEY:
 # Create Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Separate client for authenticating Flutter app users.
+# Existing backend database operations continue using `supabase`.
+AUTH_SUPABASE_URL = os.getenv(
+    "AUTH_SUPABASE_URL",
+    "https://xemhoptmlaxahdhfevuc.supabase.co",
+)
+AUTH_SUPABASE_KEY = os.getenv("AUTH_SUPABASE_KEY")
+auth_supabase = (
+    create_client(AUTH_SUPABASE_URL, AUTH_SUPABASE_KEY)
+    if AUTH_SUPABASE_KEY
+    else None
+)
+
 
 # =========================
 # STRIPE CONFIG (NEW ADDITION)
