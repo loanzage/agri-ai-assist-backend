@@ -27,7 +27,7 @@ LEGACY_SUPABASE_URL = (
     "https://xmdjdxwsvvdxwizokhgs.supabase.co"
 )
 
-LEGACY_SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+LEGACY_SUPABASE_KEY = os.getenv("LEGACY_SUPABASE_KEY")
 
 
 if not LEGACY_SUPABASE_KEY:
@@ -391,3 +391,173 @@ async def get_market_intelligence(
     # ========================================================
 
     return result
+
+# ============================================================
+# HISTORICAL MARKET DATA
+#
+# These endpoints read historical World Bank RTFP data
+# from the legacy Supabase database.
+#
+# They do not modify or replace live market intelligence.
+# Supported crops: maize, beans, sorghum.
+# ============================================================
+
+HISTORICAL_SUPPORTED_CROPS = {
+    "maize",
+    "beans",
+    "sorghum",
+}
+
+
+def validate_historical_crop(crop_slug: str) -> str:
+    crop = crop_slug.strip().lower()
+
+    if crop not in HISTORICAL_SUPPORTED_CROPS:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Unsupported historical crop.",
+                "supported_crops": sorted(
+                    HISTORICAL_SUPPORTED_CROPS
+                ),
+            },
+        )
+
+    return crop
+
+
+# ============================================================
+# GET HISTORICAL MARKETS
+#
+# GET /api/historical-markets/{crop_slug}
+#
+# Returns market coverage and dataset freshness metadata.
+# ============================================================
+
+@router.get("/historical-markets/{crop_slug}")
+async def get_historical_markets(crop_slug: str):
+
+    crop_slug = validate_historical_crop(crop_slug)
+
+    try:
+        response = (
+            legacy_supabase
+            .rpc(
+                "get_historical_market_list",
+                {
+                    "p_crop_slug": crop_slug,
+                },
+            )
+            .execute()
+        )
+
+    except Exception as e:
+        print(
+            "HISTORICAL MARKET LIST ERROR:",
+            type(e).__name__,
+            str(e),
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to retrieve historical market data.",
+        )
+
+    data = response.data
+
+    if data is None:
+        data = []
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid historical market list response.",
+        )
+
+    return {
+        "status": "success",
+        "crop_slug": crop_slug,
+        "count": len(data),
+        "markets": data,
+    }
+
+
+# ============================================================
+# GET HISTORICAL MARKET PRICE SERIES
+#
+# GET /api/historical-market-series/{crop_slug}/{market_geo_id}
+#
+# Returns historical monthly reference prices and metadata.
+# ============================================================
+
+@router.get(
+    "/historical-market-series/{crop_slug}/{market_geo_id}"
+)
+async def get_historical_market_series(
+    crop_slug: str,
+    market_geo_id: str,
+):
+
+    crop_slug = validate_historical_crop(crop_slug)
+
+    market_geo_id = market_geo_id.strip()
+
+    if (
+        not market_geo_id.startswith("gid_")
+        or not market_geo_id[4:].isalnum()
+        or len(market_geo_id) > 100
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid market_geo_id.",
+        )
+
+    try:
+        response = (
+            legacy_supabase
+            .rpc(
+                "get_historical_market_price_series",
+                {
+                    "p_crop_slug": crop_slug,
+                    "p_market_geo_id": market_geo_id,
+                },
+            )
+            .execute()
+        )
+
+    except Exception as e:
+        print(
+            "HISTORICAL MARKET SERIES ERROR:",
+            type(e).__name__,
+            str(e),
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to retrieve historical price series.",
+        )
+
+    data = response.data
+
+    if data is None:
+        data = []
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid historical price series response.",
+        )
+
+    return {
+        "status": "success",
+        "crop_slug": crop_slug,
+        "market_geo_id": market_geo_id,
+        "count": len(data),
+        "observations": data,
+        "data_type": "historical_reference_estimates",
+        "warning": (
+            "Historical reference estimates are not current "
+            "farm-gate market quotations."
+        ),
+    }
+
