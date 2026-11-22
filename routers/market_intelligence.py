@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from dotenv import load_dotenv
@@ -560,4 +562,250 @@ async def get_historical_market_series(
             "farm-gate market quotations."
         ),
     }
+
+
+# ============================================================
+# COFFEE MARKET PRICES
+#
+# GET /api/coffee-market-prices
+# GET /api/coffee-market-prices?grade=kiboko
+#
+# Reads official MAAIF coffee farm-gate observations.
+# Does not use the World Bank historical reference dataset.
+# ============================================================
+
+@router.get("/coffee-market-prices")
+async def get_coffee_market_prices(
+    grade: str | None = Query(
+        None,
+        description="Optional coffee grade: faq, kiboko, arabica_parchment, drugar",
+    ),
+    limit: int = Query(
+        90,
+        ge=1,
+        le=365,
+        description="Maximum observations returned per grade",
+    ),
+):
+    coffee_grades = {
+        "faq": "FAQ",
+        "kiboko": "Kiboko",
+        "arabica_parchment": "Arabica Parchment",
+        "drugar": "Drugar",
+    }
+
+    requested_grade = grade.strip().lower() if grade else None
+
+    if requested_grade and requested_grade not in coffee_grades:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Unsupported coffee grade.",
+                "supported_grades": list(coffee_grades.keys()),
+            },
+        )
+
+    selected_grades = (
+        [requested_grade]
+        if requested_grade
+        else list(coffee_grades.keys())
+    )
+
+    try:
+        source_response = (
+            legacy_supabase
+            .table("market_price_sources")
+            .select(
+                "name,organization,source_url,source_type,"
+                "update_frequency,reliability_score,is_active,max_age_days"
+            )
+            .eq("name", "MAAIF Coffee")
+            .maybe_single()
+            .execute()
+        )
+
+        source = source_response.data
+
+        if not source:
+            raise HTTPException(
+                status_code=503,
+                detail="MAAIF Coffee source is not registered.",
+            )
+
+        # Read all available observations in pages, so the distinct-date
+        # count is not limited to the observations returned to the UI.
+        all_rows = []
+        page_start = 0
+        page_size = 1000
+
+        while True:
+            response = (
+                legacy_supabase
+                .table("market_price_observations")
+                .select(
+                    "grade,price,min_price,max_price,currency,unit,"
+                    "observed_date,confidence,is_estimated,trend,notes,"
+                    "source_url,market,district,region"
+                )
+                .eq("crop_slug", "coffee")
+                .eq("source_name", "MAAIF Coffee")
+                .eq("price_type", "farm_gate_weekly")
+                .order("observed_date", desc=True)
+                .range(page_start, page_start + page_size - 1)
+                .execute()
+            )
+
+            batch = response.data or []
+            all_rows.extend(batch)
+
+            if len(batch) < page_size:
+                break
+
+            page_start += page_size
+
+        today = datetime.now(
+            ZoneInfo("Africa/Kampala")
+        ).date()
+
+        max_age_days = int(source.get("max_age_days") or 3)
+        source_active = bool(source.get("is_active"))
+
+        def serialize_observation(row):
+            return {
+                "grade": row.get("grade"),
+                "price": row.get("price"),
+                "min_price": row.get("min_price"),
+                "max_price": row.get("max_price"),
+                "currency": row.get("currency") or "UGX",
+                "unit": row.get("unit") or "kg",
+                "observed_date": row.get("observed_date"),
+                "confidence": row.get("confidence"),
+                "is_estimated": row.get("is_estimated"),
+                "trend": row.get("trend"),
+                "notes": row.get("notes"),
+                "market": row.get("market"),
+                "district": row.get("district"),
+                "region": row.get("region"),
+                "source_url": row.get("source_url"),
+            }
+
+        grade_results = []
+
+        for grade_key in selected_grades:
+            grade_rows = [
+                row for row in all_rows
+                if row.get("grade") == grade_key
+                and row.get("observed_date")
+            ]
+
+            grade_rows.sort(
+                key=lambda row: str(row.get("observed_date")),
+                reverse=True,
+            )
+
+            distinct_dates = {
+                str(row["observed_date"])
+                for row in grade_rows
+            }
+
+            latest_row = grade_rows[0] if grade_rows else None
+
+            age_days = None
+            freshness = "unavailable"
+
+            if latest_row:
+                latest_date = datetime.strptime(
+                    str(latest_row["observed_date"])[:10],
+                    "%Y-%m-%d",
+                ).date()
+
+                age_days = (today - latest_date).days
+
+                if age_days < 0:
+                    freshness = "future_dated"
+                elif not source_active:
+                    freshness = "source_inactive"
+                elif age_days > max_age_days:
+                    freshness = "stale"
+                else:
+                    freshness = "fresh"
+
+            elif not source_active:
+                freshness = "source_inactive"
+
+            trend_eligible = len(distinct_dates) >= 8
+
+            # Return the most recent observations in chronological order
+            # for charting. Keep the full distinct-date count separately.
+            displayed_rows = list(reversed(grade_rows[:limit]))
+
+            grade_results.append({
+                "grade": grade_key,
+                "label": coffee_grades[grade_key],
+                "latest": (
+                    serialize_observation(latest_row)
+                    if latest_row else None
+                ),
+                "age_days": age_days,
+                "freshness": freshness,
+                "observation_count": len(grade_rows),
+                "distinct_report_dates": len(distinct_dates),
+                "trend_eligible": trend_eligible,
+                "trend_status": (
+                    "eligible_for_analysis"
+                    if trend_eligible
+                    else "insufficient_distinct_dates"
+                ),
+                "trend": (
+                    latest_row.get("trend")
+                    if trend_eligible and latest_row
+                    else None
+                ),
+                "score": None,
+                "score_status": "not_available_until_calibrated",
+                "observations": [
+                    serialize_observation(row)
+                    for row in displayed_rows
+                ],
+            })
+
+        return {
+            "status": "success",
+            "crop_slug": "coffee",
+            "price_type": "farm_gate_weekly",
+            "description": (
+                "Weekly farm-gate price ranges published in MAAIF "
+                "coffee market reports. These are not daily spot "
+                "quotations or wholesale/export prices."
+            ),
+            "source": {
+                "name": source.get("name"),
+                "organization": source.get("organization"),
+                "source_url": source.get("source_url"),
+                "source_type": source.get("source_type"),
+                "update_frequency": source.get("update_frequency"),
+                "reliability_score": source.get("reliability_score"),
+                "is_active": source_active,
+                "max_age_days": max_age_days,
+            },
+            "currency": "UGX",
+            "unit": "kg",
+            "minimum_distinct_dates_for_trend": 8,
+            "grades": grade_results,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        print(
+            "COFFEE MARKET PRICES ERROR:",
+            type(exc).__name__,
+            str(exc),
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to retrieve coffee market prices.",
+        )
 
